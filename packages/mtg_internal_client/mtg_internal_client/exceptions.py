@@ -1,0 +1,2 @@
+class MTGClientError(Exception):
+    pass

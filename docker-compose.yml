@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: services/mtg_internal_api/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app:ro
+      - data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  etl-runner:
+    build:
+      context: .
+      dockerfile: services/mtg_internal_etl_runner/Dockerfile
+    volumes:
+      - ./:/app:ro
+      - data:/app/data
+    command: ["python", "services/mtg_internal_etl_runner/etl_runner.py"]
+
+volumes:
+  data:

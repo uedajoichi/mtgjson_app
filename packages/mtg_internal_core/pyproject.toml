@@ -1,0 +1,8 @@
+[project]
+name = "mtg_internal_core"
+version = "0.1.0"
+description = "Internal core helpers (stub)"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

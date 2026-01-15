@@ -1,0 +1,8 @@
+[project]
+name = "mtg_internal_client"
+version = "0.1.0"
+description = "Internal MTG client package (stub)"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
