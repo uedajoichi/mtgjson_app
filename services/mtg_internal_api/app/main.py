@@ -88,3 +88,11 @@ def get_all_sets():
     """Get list of all available sets."""
     sets = mtg_client.get_sets()
     return {"sets": sets, "count": len(sets)}
+
+
+@app.get("/stats")
+def get_stats():
+    """Get database statistics."""
+    card_count = mtg_client.count_cards()
+    sets = mtg_client.get_sets()
+    return {"total_cards": card_count, "total_sets": len(sets)}

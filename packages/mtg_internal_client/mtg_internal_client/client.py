@@ -99,6 +99,19 @@ def get_sets() -> List[Dict[str, Any]]:
         return []
 
 
+def count_cards() -> int:
+    """Return total number of cards in the database."""
+    try:
+        conn = _get_connection()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) as total FROM cards")
+        row = c.fetchone()
+        return row[0] if row else 0
+    except Exception as e:
+        print(f"Error counting cards: {e}")
+        return 0
+
+
 def search_cards_advanced(
     name: Optional[str] = None,
     colors: Optional[List[str]] = None,
