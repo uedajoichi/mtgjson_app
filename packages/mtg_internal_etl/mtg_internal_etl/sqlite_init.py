@@ -38,4 +38,37 @@ def verify_and_init(db_path: str) -> None:
     else:
         print("⚠ Cards table not found (expected: LEA, 2ED, etc. as sets)")
 
+    # Create foreignData table if missing
+    c.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='foreign_data'"
+    )
+    has_foreign = c.fetchone()[0]
+    if not has_foreign:
+        print("Creating foreign_data table...")
+        c.execute(
+            """
+            CREATE TABLE foreign_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_uuid TEXT NOT NULL,
+                language TEXT NOT NULL,
+                name TEXT,
+                face_name TEXT,
+                text TEXT,
+                flavor_text TEXT,
+                type TEXT,
+                UNIQUE(card_uuid, language),
+                FOREIGN KEY(card_uuid) REFERENCES cards(uuid)
+            )
+            """
+        )
+        c.execute("CREATE INDEX idx_foreign_data_card_uuid ON foreign_data(card_uuid)")
+        c.execute("CREATE INDEX idx_foreign_data_language ON foreign_data(language)")
+        c.execute(
+            "CREATE INDEX idx_foreign_data_name ON foreign_data(name COLLATE NOCASE)"
+        )
+        conn.commit()
+        print("✓ foreign_data table created with indices")
+    else:
+        print("✓ foreign_data table exists")
+
     conn.close()

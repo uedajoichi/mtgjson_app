@@ -96,3 +96,33 @@ def get_stats():
     card_count = mtg_client.count_cards()
     sets = mtg_client.get_sets()
     return {"total_cards": card_count, "total_sets": len(sets)}
+
+
+@app.get("/cards/search")
+def search_cards_by_language(
+    q: str = Query(..., min_length=1, description="Card name to search"),
+    lang: str = Query("en", description="Language code (e.g., 'en', 'ja', 'fr')"),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """
+    Search for cards by foreign name in specified language.
+
+    Example: /cards/search?q=ブラック&lang=ja&limit=5
+    """
+    if lang == "en":
+        # For English, use regular card search
+        results = mtg_client.find_cards(q, limit=limit)
+        return {"query": q, "language": lang, "results": results, "count": len(results)}
+    else:
+        # For other languages, search foreign_data table
+        results = mtg_client.find_cards_by_language(q, lang, limit=limit)
+        return {"query": q, "language": lang, "results": results, "count": len(results)}
+
+
+@app.get("/cards/{uuid}/translations")
+def get_card_translations(uuid: str):
+    """Get a card with all its foreign translations."""
+    card = mtg_client.get_card_with_translations(uuid)
+    if card is None:
+        return {"found": False}
+    return {"found": True, "card": card}

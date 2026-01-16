@@ -112,6 +112,66 @@ def count_cards() -> int:
         return 0
 
 
+def find_cards_by_language(
+    name: str, language: str, limit: int = 100
+) -> List[Dict[str, Any]]:
+    """Return all matching cards by foreign name in specified language (case-insensitive)."""
+    try:
+        conn = _get_connection()
+        c = conn.cursor()
+
+        query = "%{}%".format(name.strip())
+        c.execute(
+            """
+            SELECT fd.card_uuid, fd.name, fd.language, fd.face_name, fd.text, fd.flavor_text, fd.type,
+                   c.name as english_name, c.uuid
+            FROM foreign_data fd
+            LEFT JOIN cards c ON fd.card_uuid = c.uuid
+            WHERE fd.name LIKE ? COLLATE NOCASE AND fd.language = ?
+            LIMIT ?
+            """,
+            (query, language, limit),
+        )
+        rows = c.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"Error querying cards by language: {e}")
+        return []
+
+
+def get_card_with_translations(card_uuid: str) -> Optional[Dict[str, Any]]:
+    """Return a card with all its foreign translations."""
+    try:
+        conn = _get_connection()
+        c = conn.cursor()
+
+        # Get base card
+        c.execute("SELECT * FROM cards WHERE uuid = ? LIMIT 1", (card_uuid,))
+        card_row = c.fetchone()
+        if not card_row:
+            return None
+
+        card_dict = dict(card_row)
+
+        # Get foreign data for this card
+        c.execute(
+            """
+            SELECT language, name, face_name, text, flavor_text, type
+            FROM foreign_data
+            WHERE card_uuid = ?
+            ORDER BY language
+            """,
+            (card_uuid,),
+        )
+        translations = c.fetchall()
+        card_dict["foreign_data"] = [dict(row) for row in translations]
+
+        return card_dict
+    except Exception as e:
+        print(f"Error fetching card with translations: {e}")
+        return None
+
+
 def search_cards_advanced(
     name: Optional[str] = None,
     colors: Optional[List[str]] = None,

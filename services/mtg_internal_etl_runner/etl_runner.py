@@ -1,7 +1,7 @@
 import os
 import sys
 
-from mtg_internal_etl import etl, sqlite_downloader, sqlite_init
+from mtg_internal_etl import etl, sqlite_downloader, sqlite_init, migrate
 
 
 def main():
@@ -12,17 +12,21 @@ def main():
 
     try:
         # Download SQLite if needed
-        print(f"\n[1/2] Downloading SQLite to {db_path}...")
+        print(f"\n[1/4] Downloading SQLite to {db_path}...")
         sqlite_downloader.download_sqlite(db_path)
 
         # Initialize and verify DB
-        print(f"\n[2/2] Verifying and initializing DB...")
+        print(f"\n[2/4] Verifying and initializing DB...")
         sqlite_init.verify_and_init(db_path)
+
+        # Run database migrations
+        print(f"\n[3/4] Running database migrations...")
+        migrate.run_migrations(db_path)
 
         print("\n✓ ETL setup complete. DB ready at:", db_path)
 
-        # Run ETL logic (stub for now)
-        print("\nRunning ETL (placeholder)...")
+        # Run ETL logic
+        print("\n[4/4] Running ETL (extracting foreign data)...")
         etl.run_etl_once()
 
     except Exception as e:
