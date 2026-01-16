@@ -17,6 +17,7 @@ async def require_api_key(request: Request, call_next):
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return await call_next(request)
 
+
 # Language code to language name mapping
 LANGUAGE_MAP = {
     "ja": "Japanese",
@@ -58,7 +59,10 @@ def search_cards(
 @app.get("/cards/search")
 def search_cards_by_language(
     q: str = Query(..., min_length=1, description="Card name to search"),
-    lang: str = Query("en", description="Language code or name (e.g., 'en', 'ja', 'Japanese', 'German')"),
+    lang: str = Query(
+        "en",
+        description="Language code or name (e.g., 'en', 'ja', 'Japanese', 'German')",
+    ),
     limit: int = Query(10, ge=1, le=100),
 ):
     """
@@ -69,15 +73,25 @@ def search_cards_by_language(
     """
     # Normalize language parameter
     normalized_lang = normalize_language(lang)
-    
+
     if normalized_lang == "English":
         # For English, use regular card search
         results = mtg_client.find_cards(q, limit=limit)
-        return {"query": q, "language": normalized_lang, "results": results, "count": len(results)}
+        return {
+            "query": q,
+            "language": normalized_lang,
+            "results": results,
+            "count": len(results),
+        }
     else:
         # For other languages, search foreign_data table
         results = mtg_client.find_cards_by_language(q, normalized_lang, limit=limit)
-        return {"query": q, "language": normalized_lang, "results": results, "count": len(results)}
+        return {
+            "query": q,
+            "language": normalized_lang,
+            "results": results,
+            "count": len(results),
+        }
 
 
 @app.get("/cards/advanced")
