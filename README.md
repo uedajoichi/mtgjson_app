@@ -34,7 +34,7 @@ Magic: The Gathering のカード情報を提供する内部 API。MTGJSON デ�
 ├── README.md                          # このファイル
 └── data/                              # SQLite DB（.gitignore）
     ├── AllPrintings.sqlite            # MTG カード情報
-    └── sync_state.json                # ダウンロード状態管理
+    └── sync_state.json                # SQLite ダウンロード状態管理
 ```
 
 ## クイックスタート（Docker）
@@ -57,6 +57,22 @@ docker compose up
 - データベースマイグレーション実行（`foreign_data` テーブル作成）
 - ETL 処理で外国語翻訳データを抽出・投入
 - ダウンロード完了後、API は `http://localhost:8000` で利用可能
+
+## バージョニング方針
+
+- **API**: 破壊的変更は `/v1/...` のようなバージョン付きパスで提供する方針。現行の未バージョンパスは v1 相当として扱う
+- **SDK**: SemVer（`MAJOR.MINOR.PATCH`）を採用
+
+## 設定（環境変数）
+
+- `MTG_DB_PATH`: SQLite DB パス（デフォルト: `data/AllPrintings.sqlite`）
+- `MTG_DATA_DIR`: データ保存先ディレクトリ（`AllPrintings.sqlite` と `sync_state.json` の配置先）
+- `MTG_ETL_INTERVAL_MINUTES`: ETL 実行間隔（分）。未設定または `0` の場合はワンショット実行
+- `MTG_DEMO_MODE`: デモ用翻訳データを使用（`true` で有効）
+- `MTG_TEST_MODE`: テストモード（`true` で有効）
+- `MTG_USE_DEMO_FOREIGN_DATA`: 実DBの翻訳テーブルが無い場合にデモ翻訳を使う（`1`, `true`, `yes` で有効）
+- `MTG_API_KEY`: API Key（設定時は `X-API-Key` ヘッダー必須）
+- `PYTHONUNBUFFERED`: ログ出力を即座に表示（Docker で設定済み）
 
 ### API エンドポイント
 
@@ -114,6 +130,28 @@ curl "http://localhost:8000/cards/{uuid}/translations"
 # }
 ```
 
+**セットと番号でカード取得 — セットコードと番号でカードを検索（NEW!）**:
+
+```bash
+curl "http://localhost:8000/sets/LEA/cards/1"
+# {
+#   "found": true,
+#   "card": {
+#     "uuid": "...",
+#     "name": "Artifact Possession",
+#     "setCode": "LEA",
+#     "number": "1",
+#     "foreign_data": [
+#       {"language": "Japanese", "name": "...", "text": "..."},
+#       ...
+#     ]
+#   }
+# }
+
+# 別なセット
+curl "http://localhost:8000/sets/M21/cards/42a"
+```
+
 **複合検索 — 複数条件で詳細検索**:
 
 ```bash
@@ -145,6 +183,20 @@ curl "http://localhost:8000/cards/advanced?name=Lotus&colors=B,G&type=Artifact&r
 | `rarity`    | レアリティ（部分一致）                     | `Common`, `Uncommon`, `Rare`, `Mythic Rare`  |
 | `limit`     | 結果数上限（1-100、デフォルト: 10）        | `10`, `50`, `100`                            |
 
+**エンドポイント一覧**:
+
+| エンドポイント                       | メソッド | 説明                       | 言語対応                      |
+| ------------------------------------ | -------- | -------------------------- | ----------------------------- |
+| `/health`                            | GET      | ヘルスチェック             | -                             |
+| `/stats`                             | GET      | 統計情報取得               | -                             |
+| `/sets`                              | GET      | セット一覧取得             | -                             |
+| `/cards?q=...`                       | GET      | カード名で検索             | 英語のみ                      |
+| `/cards/advanced`                    | GET      | 複合条件検索               | 英語のみ                      |
+| `/cards/{name}`                      | GET      | 単一カード検索（互換性）   | 英語のみ                      |
+| `/cards/search?q=...&lang=...`       | GET      | **多言語検索**             | ✨ 日本語・フランス語など対応 |
+| `/cards/{uuid}/translations`         | GET      | **全言語版取得**           | ✨ 全言語データ取得           |
+| `/sets/{setCode}/cards/{cardNumber}` | GET      | **セット番号でカード取得** | ✨ 多言語対応                 |
+
 **多言語検索フィルタ一覧**:
 
 | パラメータ | 説明                                             | 例                                                                                                                         |
@@ -167,6 +219,15 @@ curl http://localhost:8000/sets
 # {"sets":[...],"count":...}
 ```
 
+### 認証（API Key）
+
+内部利用であっても安全性のため API Key を推奨しています。`MTG_API_KEY` を設定すると、
+全エンドポイントが `X-API-Key` ヘッダー必須になります。
+
+```bash
+curl -H "X-API-Key: $MTG_API_KEY" http://localhost:8000/health
+```
+
 ## パッケージ説明
 
 ### `mtg_internal_client`
@@ -183,6 +244,9 @@ card = client.get_card_by_name("Black Lotus")
 # 多言語検索 (NEW!)
 japanese_cards = client.find_cards_by_language("ブラック", "Japanese", limit=10)
 card_with_translations = client.get_card_with_translations(card_uuid)
+
+# セット&番号でカード取得 (NEW!)
+card = client.get_card_by_set_and_number("LEA", "1")
 
 # セット取得
 sets = client.get_sets()
@@ -207,11 +271,6 @@ SQLite ダウンロード・初期化・マイグレーション・ETL ロジッ
 - `sqlite_reader.py`: SQLite からのデータ抽出
 - `etl.py`: 外国語翻訳データの抽出・投入パイプライン
 - `upsert.py`: バッチデータベース投入
-
-## 環境変数
-
-- `MTG_DB_PATH`: SQLite DB パス（デフォルト: `data/AllPrintings.sqlite`）
-- `PYTHONUNBUFFERED`: ログ出力を即座に表示（Docker で設定済み）
 
 ## パフォーマンス
 
@@ -249,10 +308,10 @@ CREATE INDEX idx_foreign_data_name ON foreign_data(name COLLATE NOCASE);
 
 ### マイグレーション管理
 
-`sqlite_migrations` テーブルで適用済みマイグレーションを追跡:
+`app_migrations` テーブルで適用済みマイグレーションを追跡:
 
 ```sql
-CREATE TABLE sqlite_migrations (
+CREATE TABLE app_migrations (
     id INTEGER PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -280,18 +339,37 @@ CREATE TABLE sqlite_migrations (
 - ✨ マイグレーション管理：`migrate.py` でスキーマ更新を版管理
 - ✨ 統計情報 API：`/stats` エンドポイントでカード数・セット数を取得
 - ✨ 翻訳情報 API：`/cards/{uuid}/translations` で全言語版を取得
+- ✨ セット&番号検索 API：`/sets/{setCode}/cards/{cardNumber}` でセットと番号からカード取得（多言語対応）
 
 **改善**:
 
 - 📈 `foreign_data` テーブルに複数インデックスを追加（検索高速化）
 - 📈 ETL ランナーに段階的実行ログ出力（4 ステップ表示）
 - 📈 クライアント SDK に言語別検索関数を追加
+- 📈 クライアント SDK に `get_card_by_set_and_number()` 関数を追加
+- 📈 エンドポイント一覧テーブルを README に追加
 
 ### v1.0.0 (初版)
 
 基本的なカード検索機能、複合フィルター検索
 
 ## トラブルシューティング
+
+### 重要：多言語データについて
+
+**現在の実装状況**：
+
+- ✅ SQLite スキーマは `foreign_data` テーブルに対応している
+- ✅ API エンドポイントは多言語検索機能を備えている
+- ✅ MTGJSON SQLite に含まれる外部翻訳テーブル（例: `cardForeignData`）から抽出して `foreign_data` に投入
+- ⚠️ もし SQLite 側に外部翻訳テーブルが無い場合、`foreign_data` は空になります
+
+**多言語データを有効にするには**:
+
+1. MTGJSON の `AllPrintings.sqlite` を用意する
+2. ETL を実行して `foreign_data` に投入する
+
+デモ翻訳を使いたい場合は `MTG_USE_DEMO_FOREIGN_DATA=1` を設定します。
 
 ### 「Read-only file system」エラー
 
@@ -325,15 +403,26 @@ docker compose exec api sqlite3 /app/data/AllPrintings.sqlite ".tables"
 docker compose exec api sqlite3 /app/data/AllPrintings.sqlite "SELECT COUNT(*) FROM foreign_data"
 
 # マイグレーション状態確認
-docker compose exec api sqlite3 /app/data/AllPrintings.sqlite "SELECT * FROM sqlite_migrations"
+docker compose exec api sqlite3 /app/data/AllPrintings.sqlite "SELECT * FROM app_migrations"
 ```
+
+SQLite に外部翻訳テーブルが存在するかも確認:
+
+```bash
+docker compose exec api sqlite3 /app/data/AllPrintings.sqlite ".tables" | grep -E "cardForeignData|card_foreign_data|foreignData"
+```
+
+存在しない場合は、翻訳テーブルが含まれる SQLite を用意するか、
+`MTG_USE_DEMO_FOREIGN_DATA=1` でデモ翻訳を利用してください。
 
 ETL ランナーが正常に完了しているか再度ログを確認:
 
 ```bash
-docker compose logs etl-runner | grep -E "foreign_data|Upserted|migration"
+docker compose logs etl-runner | grep -E "foreign_data|Upserted|migration|Extracted"
 ```
+
+**注意**：SQLite に外部翻訳テーブルが無い場合、`foreign_data` には翻訳データが入りません。
 
 ## ライセンス
 
-MTGJSON データは公式ライセンスに従う。本プロジェクトは MIT ライセンス。
+MTGJSON データは公式ライセンスに従う。本プロジェクトは MIT ライセンス（`LICENSE` 参照）。

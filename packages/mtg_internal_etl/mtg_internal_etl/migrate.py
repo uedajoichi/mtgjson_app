@@ -25,7 +25,7 @@ def create_migration(
 
             # Check if migration has already been applied
             c.execute(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sqlite_migrations'"
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_migrations'"
             )
             has_migrations_table = c.fetchone()[0]
 
@@ -33,7 +33,7 @@ def create_migration(
                 # Create migrations tracking table
                 c.execute(
                     """
-                    CREATE TABLE sqlite_migrations (
+                    CREATE TABLE app_migrations (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         name TEXT UNIQUE NOT NULL,
                         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -43,7 +43,7 @@ def create_migration(
                 conn.commit()
 
             # Check if this migration has been applied
-            c.execute("SELECT COUNT(*) FROM sqlite_migrations WHERE name = ?", (name,))
+            c.execute("SELECT COUNT(*) FROM app_migrations WHERE name = ?", (name,))
             already_applied = c.fetchone()[0] > 0
 
             if already_applied:
@@ -56,7 +56,7 @@ def create_migration(
             migrate_fn(conn)
 
             # Record the migration
-            c.execute("INSERT INTO sqlite_migrations (name) VALUES (?)", (name,))
+            c.execute("INSERT INTO app_migrations (name) VALUES (?)", (name,))
             conn.commit()
             conn.close()
 

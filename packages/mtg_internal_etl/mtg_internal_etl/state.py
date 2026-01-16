@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import datetime
@@ -6,7 +7,8 @@ from datetime import datetime
 
 def get_state_path() -> Path:
     """Get or create state file path."""
-    state_path = Path("data/sync_state.json")
+    data_dir = os.environ.get("MTG_DATA_DIR", "data")
+    state_path = Path(data_dir) / "sync_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     return state_path
 

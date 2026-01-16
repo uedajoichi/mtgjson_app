@@ -9,7 +9,11 @@ _CONN: Optional[sqlite3.Connection] = None
 
 def _get_db_path() -> str:
     """Get SQLite database path from env or default."""
-    return os.environ.get("MTG_DB_PATH", "data/AllPrintings.sqlite")
+    db_path = os.environ.get("MTG_DB_PATH")
+    if db_path:
+        return db_path
+    data_dir = os.environ.get("MTG_DATA_DIR", "data")
+    return os.path.join(data_dir, "AllPrintings.sqlite")
 
 
 def _get_connection() -> sqlite3.Connection:
@@ -23,8 +27,9 @@ def _get_connection() -> sqlite3.Connection:
                 f"AllPrintings.sqlite not found at {path}; "
                 f"run ETL or set MTG_DB_PATH"
             )
-        _CONN = sqlite3.connect(path, check_same_thread=False)
+        _CONN = sqlite3.connect(path, check_same_thread=False, timeout=10)
         _CONN.row_factory = sqlite3.Row
+        _CONN.isolation_level = None  # Autocommit mode
         _DB_PATH = path
     return _CONN
 
@@ -243,3 +248,61 @@ def search_cards_advanced(
     except Exception as e:
         print(f"Error in advanced search: {e}")
         return []
+
+
+def get_card_by_set_and_number(
+    set_code: str, card_number: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Get a card by set code and card number.
+
+    Args:
+        set_code: Set code (e.g., 'LEA', '2ED', 'M21')
+        card_number: Card number in set (e.g., '1', '42a')
+
+    Returns:
+        Card dict with foreign_data if available, or None if not found
+    """
+    try:
+        conn = _get_connection()
+        c = conn.cursor()
+
+        # Query the cards table with setCode and number
+        c.execute(
+            "SELECT * FROM cards WHERE setCode = ? COLLATE NOCASE AND number = ? COLLATE NOCASE LIMIT 1",
+            (set_code.strip(), card_number.strip()),
+        )
+        card_row = c.fetchone()
+
+        if not card_row:
+            return None
+
+        card_dict = dict(card_row)
+
+        # Get foreign translations if the foreign_data table exists
+        try:
+            c.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='foreign_data'"
+            )
+            has_foreign_table = c.fetchone()[0] > 0
+
+            if has_foreign_table:
+                c.execute(
+                    """
+                    SELECT language, name, face_name, text, flavor_text, type
+                    FROM foreign_data
+                    WHERE card_uuid = ?
+                    ORDER BY language
+                    """,
+                    (card_dict.get("uuid"),),
+                )
+                translations = c.fetchall()
+                card_dict["foreign_data"] = [dict(row) for row in translations]
+        except Exception as e:
+            print(f"Warning: Failed to fetch foreign_data: {e}")
+            card_dict["foreign_data"] = []
+
+        return card_dict
+    except Exception as e:
+        print(f"Error querying card by set and number: {e}")
+        return None
