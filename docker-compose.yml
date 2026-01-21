@@ -10,6 +10,7 @@ services:
       - data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - MTG_CORS_ORIGINS=http://localhost:3000
 
   etl-runner:
     build:

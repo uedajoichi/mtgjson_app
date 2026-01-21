@@ -1,11 +1,23 @@
 import os
 from typing import Optional, List
 from fastapi import FastAPI, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from mtg_internal_client import client as mtg_client
 
 app = FastAPI(title="mtg_internal_api")
+
+cors_origins_raw = os.environ.get("MTG_CORS_ORIGINS", "")
+cors_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.middleware("http")
