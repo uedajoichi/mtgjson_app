@@ -19,6 +19,8 @@ services:
     volumes:
       - ./:/app:ro
       - data:/app/data
+    environment:
+      - MTG_DB_PATH=/app/data/AllPrintings.sqlite
     # Note: Demo data is always used for translations
     # (MTGJSONs JSON format does not contain foreignData field)
     command: ["python", "services/mtg_internal_etl_runner/etl_runner.py"]
