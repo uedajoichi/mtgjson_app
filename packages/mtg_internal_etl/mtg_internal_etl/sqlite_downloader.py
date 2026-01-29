@@ -2,12 +2,17 @@ import hashlib
 import os
 from pathlib import Path
 from typing import Tuple, Optional
-from urllib.request import urlopen
+import gzip
+from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 from . import state
 
 MTGJSON_SQLITE_URL = "https://mtgjson.com/api/v5/AllPrintings.sqlite"
+MTGJSON_SQLITE_GZ_URL = "https://mtgjson.com/api/v5/AllPrintings.sqlite.gz"
+DEFAULT_HEADERS = {
+    "User-Agent": "mtgjson-etl/1.0 (+https://mtgjson.com)",
+}
 
 
 def _compute_file_hash(path: str) -> str:
@@ -29,7 +34,7 @@ def check_remote_metadata() -> Optional[Tuple[int, str]]:
     Returns: (file_size, last_modified) or None if check fails.
     """
     try:
-        req = urlopen(MTGJSON_SQLITE_URL)
+        req = urlopen(Request(MTGJSON_SQLITE_URL, headers=DEFAULT_HEADERS))
         content_length = int(req.headers.get("content-length", 0))
         last_modified = req.headers.get("last-modified", "")
         req.close()
@@ -93,7 +98,7 @@ def download_sqlite(dest: str) -> str:
     print(f"\nDownloading AllPrintings.sqlite from {MTGJSON_SQLITE_URL}...")
 
     try:
-        with urlopen(MTGJSON_SQLITE_URL) as r:
+        with urlopen(Request(MTGJSON_SQLITE_URL, headers=DEFAULT_HEADERS)) as r:
             total_size = int(r.headers.get("content-length", 0)) / (1024 * 1024)
             print(f"Expected size: {total_size:.1f} MB")
 
@@ -133,4 +138,57 @@ def download_sqlite(dest: str) -> str:
         # Cleanup temp file
         if temp_path.exists():
             temp_path.unlink()
-        raise
+
+        print(f"\nRetrying with gzip source {MTGJSON_SQLITE_GZ_URL}...")
+        gz_temp_path = dest_path.with_suffix(".sqlite.gz.tmp")
+        try:
+            with urlopen(Request(MTGJSON_SQLITE_GZ_URL, headers=DEFAULT_HEADERS)) as r:
+                total_size = int(r.headers.get("content-length", 0)) / (1024 * 1024)
+                print(f"Expected gzip size: {total_size:.1f} MB")
+
+                with open(gz_temp_path, "wb") as f:
+                    downloaded = 0
+                    while True:
+                        chunk = r.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if downloaded % (10 * 1024 * 1024) == 0:
+                            print(f"  Downloaded {downloaded / (1024 * 1024):.1f} MB...")
+
+            if not gz_temp_path.exists() or gz_temp_path.stat().st_size == 0:
+                raise Exception("Downloaded gzip file is empty")
+
+            print("Decompressing gzip to SQLite...")
+            with gzip.open(gz_temp_path, "rb") as gz_f, open(temp_path, "wb") as out_f:
+                while True:
+                    chunk = gz_f.read(8192)
+                    if not chunk:
+                        break
+                    out_f.write(chunk)
+
+            if not temp_path.exists() or temp_path.stat().st_size == 0:
+                raise Exception("Decompressed file is empty")
+
+            if dest_path.exists():
+                dest_path.unlink()
+            temp_path.rename(dest_path)
+
+            file_size = dest_path.stat().st_size
+            file_hash = _compute_file_hash(str(dest_path))
+            state.update_sync_state(file_hash, file_size)
+
+            print(f"✓ Downloaded to {dest}")
+            print(f"  Size: {file_size / (1024 * 1024):.1f} MB")
+            print(f"  Hash: {file_hash[:16]}...")
+
+            return str(dest_path)
+        except Exception as e2:
+            print(f"✗ Gzip download failed: {e2}")
+            if gz_temp_path.exists():
+                gz_temp_path.unlink()
+            raise
+        finally:
+            if gz_temp_path.exists():
+                gz_temp_path.unlink()
