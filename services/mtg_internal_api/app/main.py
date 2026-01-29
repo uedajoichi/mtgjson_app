@@ -52,7 +52,7 @@ def normalize_language(lang: str) -> str:
 @app.get("/health")
 def health():
     """Health check endpoint."""
-    return {"status": "ok"}
+    return {"status": "ok", "db": mtg_client.get_db_path()}
 
 
 @app.get("/cards")

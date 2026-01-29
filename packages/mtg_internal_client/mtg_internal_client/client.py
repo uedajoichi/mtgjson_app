@@ -16,6 +16,11 @@ def _get_db_path() -> str:
     return os.path.join(data_dir, "AllPrintings.sqlite")
 
 
+def get_db_path() -> str:
+    """Return the resolved SQLite database path without opening a connection."""
+    return _get_db_path()
+
+
 def _get_connection() -> sqlite3.Connection:
     """Get or create DB connection (cached)."""
     global _CONN, _DB_PATH
